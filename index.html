@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Purzelhuus Menüplaner</title>
+  <meta name="theme-color" content="#8bc34a">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <style>
+    :root{--green:#8bc34a;--dark:#23301d;--soft:#f5f7f2;--warn:#fff4cc;--bad:#ffd7d7}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;margin:0;background:var(--soft);color:var(--dark)}
+    header{background:linear-gradient(135deg,#8bc34a,#c5e1a5);padding:22px 18px;border-radius:0 0 28px 28px}
+    h1{margin:0;font-size:28px} .sub{margin-top:6px;font-size:15px}
+    main{padding:16px;max-width:980px;margin:auto}
+    .card{background:white;border-radius:22px;padding:16px;margin:12px 0;box-shadow:0 6px 18px rgba(0,0,0,.08)}
+    button{border:0;border-radius:16px;padding:13px 15px;font-size:16px;background:var(--green);color:#10200b;font-weight:700;margin:5px 4px}
+    button.secondary{background:#e8f0e2}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{padding:10px;border-bottom:1px solid #e6e6e6;text-align:left;vertical-align:top}
+    th{background:#f1f8e9}
+    select,input{width:100%;font-size:14px;border:1px solid #d7dfd0;border-radius:10px;padding:8px;background:white}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+    .metric{border-radius:18px;background:#f1f8e9;padding:12px}
+    .metric b{font-size:24px;display:block}
+    .ok{background:#e8f5e9}.warn{background:var(--warn)}.bad{background:var(--bad)}
+    .small{font-size:13px;color:#53614d}
+    @media(max-width:760px){table,thead,tbody,tr,td,th{display:block} thead{display:none} tr{background:#fff;border-radius:18px;margin:12px 0;padding:10px;box-shadow:0 3px 12px rgba(0,0,0,.06)} td{border:0;padding:7px} td:before{content:attr(data-label);display:block;font-weight:700;margin-bottom:3px;color:#607d3b}}
+  </style>
+</head>
+<body>
+<header>
+  <h1>🍽️ Purzelhuus Menüplaner</h1>
+  <div class="sub">Abwechslungsreiche Wochenplanung für Kinderkrippen-Menüs</div>
+</header>
+<main>
+  <div class="card">
+    <button onclick="generatePlan()">Neue Woche vorschlagen</button>
+    <button class="secondary" onclick="copyText()">Plan kopieren</button>
+    <button class="secondary" onclick="downloadCSV()">CSV exportieren</button>
+    <p class="small">Tipp iPhone: In Safari öffnen → Teilen → Zum Home-Bildschirm.</p>
+  </div>
+
+  <div class="card">
+    <h2>Wochenplan</h2>
+    <table id="planTable">
+      <thead><tr><th>Tag</th><th>Morgenessen</th><th>Mittagessen Fleisch</th><th>Mittagessen Vegi</th><th>Z'Vieri</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Qualitätskontrolle</h2>
+    <div class="grid" id="metrics"></div>
+    <div id="warnings"></div>
+  </div>
+
+  <div class="card">
+    <h2>Elterntext</h2>
+    <p id="parentText"></p>
+  </div>
+</main>
+
+<script src="menus.js"></script>
+<script>
+const days = ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag"];
+let currentPlan = [];
+
+function choice(arr){ return arr[Math.floor(Math.random()*arr.length)] }
+function hasTag(item, tag){ return item.tags.includes(tag) }
+function pick(category, used, filterFn=null){
+  let arr = MENUS[category].filter(x => !used.has(x.name));
+  if(filterFn){
+    const filtered = arr.filter(filterFn);
+    if(filtered.length) arr = filtered;
+  }
+  if(!arr.length) arr = MENUS[category];
+  const item = choice(arr);
+  used.add(item.name);
+  return item;
+}
+function generatePlan(){
+  const used = new Set();
+  const fishDay = choice(days);
+  currentPlan = days.map((day,i) => {
+    const morgen = pick("morgenessen", used, x => (i===1 || i===3) ? (hasTag(x,"hafer") || hasTag(x,"frucht")) : true);
+    const fleisch = pick("fleisch", used, x => day===fishDay ? hasTag(x,"fisch") : !hasTag(x,"fisch"));
+    const vegi = pick("vegi", used, x => (i===0 || i===2 || i===4) ? hasTag(x,"gemuese") : true);
+    const zvieri = pick("zvieri", used, x => (i===0 || i===3) ? hasTag(x,"gemuese") : !hasTag(x,"suess"));
+    return {day,morgen,fleisch,vegi,zvieri};
+  });
+  render();
+}
+function render(){
+  const tbody = document.querySelector("#planTable tbody");
+  tbody.innerHTML = "";
+  currentPlan.forEach((r,idx) => {
+    const tr = document.createElement("tr");
+    ["day","morgen","fleisch","vegi","zvieri"].forEach((key,i)=>{
+      const td = document.createElement("td");
+      td.setAttribute("data-label", ["Tag","Morgenessen","Mittagessen Fleisch","Mittagessen Vegi","Z'Vieri"][i]);
+      if(key==="day"){ td.textContent = r.day; }
+      else{
+        const sel = document.createElement("select");
+        const cat = key==="morgen" ? "morgenessen" : key;
+        MENUS[cat].forEach(m=>{
+          const opt = document.createElement("option");
+          opt.value = m.name; opt.textContent = m.name;
+          if(r[key].name === m.name) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        sel.onchange = () => { r[key] = MENUS[cat].find(m=>m.name===sel.value); renderMetrics(); };
+        td.appendChild(sel);
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  renderMetrics();
+}
+function allTags(){
+  return currentPlan.flatMap(r => [...r.morgen.tags,...r.fleisch.tags,...r.vegi.tags,...r.zvieri.tags]);
+}
+function renderMetrics(){
+  const tags = allTags();
+  const count = t => tags.filter(x=>x===t).length;
+  const metrics = [
+    ["Fisch",count("fisch"), count("fisch")>=1?"ok":"bad"],
+    ["Gemüse",count("gemuese"), count("gemuese")>=6?"ok":"warn"],
+    ["Protein",count("protein"), count("protein")>=5?"ok":"warn"],
+    ["Hafer/Frucht Frühstück",count("hafer")+count("frucht"), count("hafer")>=2?"ok":"warn"],
+    ["Verarbeitet",count("verarbeitet"), count("verarbeitet")<=3?"ok":"warn"],
+    ["Süsse Z'Vieri",count("suess"), count("suess")<=2?"ok":"warn"]
+  ];
+  document.getElementById("metrics").innerHTML = metrics.map(m=>`<div class="metric ${m[2]}"><span>${m[0]}</span><b>${m[1]}</b></div>`).join("");
+  let warn = [];
+  if(count("fisch")<1) warn.push("Fischgericht fehlt.");
+  if(count("gemuese")<6) warn.push("Gemüseanteil eher knapp.");
+  if(count("hafer")<2) warn.push("Mehr Birchermüesli, Porridge oder Knuspermüesli einplanen.");
+  if(count("verarbeitet")>3) warn.push("Viele verarbeitete Produkte.");
+  if(count("suess")>2) warn.push("Viele süsse Z'Vieri.");
+  document.getElementById("warnings").innerHTML = warn.length ? `<p class="bad card">${warn.join(" ")}</p>` : `<p class="ok card">Die Woche wirkt ausgewogen und abwechslungsreich.</p>`;
+  makeParentText();
+}
+function makeParentText(){
+  const mains = currentPlan.map(r=>r.vegi.name).slice(0,3).join(", ");
+  document.getElementById("parentText").textContent = `Diese Woche stehen im Purzelhuus abwechslungsreiche und kindgerechte Menüs auf dem Plan, unter anderem ${mains}. Dazu gibt es täglich saisonale Salate, Gemüsesticks oder Früchte.`;
+}
+function planText(){
+  return currentPlan.map(r=>`${r.day}: Morgenessen: ${r.morgen.name} | Fleisch: ${r.fleisch.name} | Vegi: ${r.vegi.name} | Z'Vieri: ${r.zvieri.name}`).join("\n");
+}
+function copyText(){ navigator.clipboard.writeText(planText()); alert("Wochenplan kopiert."); }
+function downloadCSV(){
+  let csv = "Tag,Morgenessen,Mittagessen Fleisch,Mittagessen Vegi,Z'Vieri\n";
+  currentPlan.forEach(r=>{ csv += [r.day,r.morgen.name,r.fleisch.name,r.vegi.name,r.zvieri.name].map(x=>`"${x.replaceAll('"','""')}"`).join(",") + "\n"; });
+  const blob = new Blob([csv],{type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "purzelhuus_wochenplan.csv"; a.click();
+}
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js"); }
+generatePlan();
+</script>
+</body>
+</html>
